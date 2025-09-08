@@ -42,10 +42,10 @@ timstr:	.asciz 	"text more text lots of text\0"
 
 # Function for displaying a string with a newline at the end	
 display_string:	
-	li a7, 4
+	li a7,4
 	ecall
 	li a0, 10
-	li a7, 11
+	li a7,11
 	ecall
 	jr ra
 	
@@ -54,7 +54,7 @@ timetemplate:
 	jal     display_string
 	
 	# wait a little
-	li	a0, 2		# ms
+	li	a0, 1000		# ms
 	jal	delay
 	
 	# call tick
@@ -111,106 +111,137 @@ tiend:	sw	t0,0(a0)	# save updated result
 # Place for your functions: time2string, hex2asc, delay.#
 #########################################################
 
-hex2asc:
-	li	a0, 1		# test number (from 0 to 15)
+
+
+delay: 
+
+	PUSH (ra) 			#för att kunna gå tillbaka 
+	PUSH (a0)			#för att behålla orignal time gap 
 	
+		
+while: 	
+	slti 	t0, a0, 1  		# while (a0!<1)  så  while( ms > 0 )
+	bne 	t0, zero, while_done 	# break if a0 < 1
+	
+	addi 	a0, a0, -1 		# decrease: ms = ms – 1;
+	
+	li 	t1, 30			# smaller than int
+	li	t2, 0  			# i
+	
+	j  	for
+	
+ 		
+	
+
+
+for: 	bge t2, t1, for_done 	# i >= 10?
+
+ 	addi t2, t2, 1 		# i = i + 1
+
+ 	j for 			# repeat loop
+
+for_done:
+	j while
+
+while_done:
+
+	POP (a0)
+	POP (ra)
+
+	jr ra
+
+
+time2string:
+
+	
+
+    	#PUSH(t0)		blir caleld från timetemplate där t0 inte är används därför behövs de int sparas
+    	#PUSH(t1)
+    	#PUSH(t2)
+    	#PUSH(t3)
+	PUSH(ra)		# sparas för att kunna gå tillbacka till timetemplate
+	PUSH(a0)		# sparar för att den va initerads som timstr
+	
+	# M1M2 : S1S2
+
+	#push the 4 bit that matters into the 4 lsb possition 
+	
+	srli	t0, a1, 12	#M1  	
+	srli	t1, a1, 8	#M2
+	srli	t2, a1, 4 	#S1
+ 	
+ 	#take only the 4 bits that mattters
+ 	 
+	andi	t0, t0, 0x000f		#M1
+	andi	t1, t1, 0x000f		#M2
+	andi	t2, t2, 0x000f		#S1
+	andi	t3, a1, 0x000f		#S2
+	
+	#converst each 4 bit into asci 
+	
+	addi 	a0, t0, 0  		#M1	
+	jal 	hex2asc
+	addi	t0, a0, 0
+	
+	addi 	a0, t1, 0 		#M2
+	jal 	hex2asc
+	addi	t1, a0, 0
+	
+	addi 	a0, t2, 0 		#S1
+	jal 	hex2asc
+	addi	t2, a0, 0
+	
+	addi 	a0, t3, 0 		#S2
+	jal 	hex2asc
+	addi	t3, a0, 0
+	
+	# creates a array like structore for M1M2 : S1S2 /0
+	
+	POP(a0)   			# gets back the adress 
+	
+	sb 	t0, 0(a0)       	# M1 
+	sb 	t1, 1(a0)       	# M2 
+
+	li 	t4, 0x3A         	# create :
+	sb 	t4, 2(a0)        	# store :
+
+	sb 	t2, 3(a0)        	# S1 
+	sb 	t3, 4(a0)        	# S2 
+	
+	sb 	zero, 5(a0)      	# null terminator
+	
+	#POP(t3)
+    	#POP(t2)
+    	#POP(t1)
+	#POP(t0)
+
+    	POP(ra)
+	
+	jr ra
+
+hex2asc:
+		
 	addi    sp,sp,-4
 	sw      ra,0(sp)
 	
 	jal	hexasc		# call hexasc
-	
-	li	a7, 11	# write a0 to stdout
-	ecall
 
 	lw      ra,0(sp)
 	addi    sp,sp,4
-	jr      ra	
-
-  # You can write your own code for hexasc here
-  #
-
+	jr      ra
 hexasc:
-    # Ignore all bits except the last 4 bits (F = 1111)
-    andi a0, a0, 0xF
-
-    # Check if a0 <= 9 (decimal)
-    li   t0, 9
-    ble  a0, t0, digit_case
-
-    # If > 9, convert to 'A'..'F'
-    # a0 = a0 - 10 + 'A' (65)
-    li   t1, 10
-    sub  a0, a0, t1      # a0 = a0 - 10
-    li   t2, 'A'
-    add  a0, a0, t2      # a0 = a0 + 'A'
-    j    finish
-
-digit_case:
-    # Convert 0..9 to '0'..'9'
-    li   t2, '0'
-    add  a0, a0, t2
-
-finish:
-    # Clear all bits except the lowest 7 bits (ASCII code in 7 bits)
-    andi a0, a0, 0x7F
-
-    ret
-    
-time2string:
-    addi sp, sp, -8      # make stack space
-    sw ra, 4(sp)         # save return address
-    sw t0, 0(sp)         # save temp register (since we use it)
-
-    mv t2, a0            # t2 = buffer pointer
-
-    # Extract digits from a1
-    # Digit order: [min tens][min ones][sec tens][sec ones]
-    srli t0, a1, 12      # shift right 12 ? min tens
-    andi t0, t0, 0xF
-    mv a0, t0
-    jal hexasc           # convert digit
-    sb a0, 0(t2)         # store
-    addi t2, t2, 1
-
-    srli t0, a1, 8       # min ones
-    andi t0, t0, 0xF
-    mv a0, t0
-    jal hexasc
-    sb a0, 0(t2)
-    addi t2, t2, 1
-
-    li a0, ':'           # colon
-    sb a0, 0(t2)
-    addi t2, t2, 1
-
-    srli t0, a1, 4       # sec tens
-    andi t0, t0, 0xF
-    mv a0, t0
-    jal hexasc
-    sb a0, 0(t2)
-    addi t2, t2, 1
-
-    andi t0, a1, 0xF     # sec ones
-    mv a0, t0
-    jal hexasc
-    sb a0, 0(t2)
-    addi t2, t2, 1
-
-    li a0, 0             # null terminator
-    sb a0, 0(t2)
-
-    # Restore registers
-    lw t0, 0(sp)
-    lw ra, 4(sp)
-    addi sp, sp, 8
-    jr ra
-
-
-delay:
-    # Simple busy loop to waste time
-    # a0 = ms (not really accurate, just loop)
-    mv t0, a0        # copy input
-delay_loop:
-    addi t0, t0, -1
-    bnez t0, delay_loop
-    jr ra
+  	andi a0, a0, 0xF     # restettar allt förutom sista 4 LSB till 0     
+  
+	addi	a2, zero, 0x37  
+  	addi	a1, zero, 0x30
+  	addi	a4, zero, 0
+  	
+  	slti	a3, a0, 10      # if a0 < 10
+  	
+  	bne	a3, a4, else     # if a0 < 10 add 0x30 if a0 > 10 add 0x37
+  	add	a0, a0, a2
+  	jr	ra
+  	
+  	else:
+  	add	a0, a0, a1
+  	jr	ra	
