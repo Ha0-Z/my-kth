@@ -112,7 +112,7 @@ tiend:	sw	t0,0(a0)	# save updated result
 #########################################################
 
 hex2asc:
-	li	a0, 1		# test number (from 0 to 15)
+	li	a0, 17		# test number (from 0 to 15)
 	
 	addi    sp,sp,-4
 	sw      ra,0(sp)
@@ -156,61 +156,92 @@ finish:
 
     ret
     
+    
+
 time2string:
-    addi sp, sp, -8      # make stack space
-    sw ra, 4(sp)         # save return address
-    sw t0, 0(sp)         # save temp register (since we use it)
+    # Save registers that need to be preserved
+    PUSH(ra)
+    PUSH(s0)
+    PUSH(s1)
+    
+    mv s0, a0            # s0 = buffer pointer
+    mv s1, a1            # s1 = time value
 
-    mv t2, a0            # t2 = buffer pointer
+    # Extract and convert minutes tens digit
+    srli a0, s1, 12      # shift right 12 bits to get min tens
+    andi a0, a0, 0xF     # mask to get only 4 bits
+    jal hexasc           # convert to ASCII
+    sb a0, 0(s0)         # store at buffer
+    addi s0, s0, 1       # increment buffer pointer
 
-    # Extract digits from a1
-    # Digit order: [min tens][min ones][sec tens][sec ones]
-    srli t0, a1, 12      # shift right 12 ? min tens
-    andi t0, t0, 0xF
-    mv a0, t0
-    jal hexasc           # convert digit
-    sb a0, 0(t2)         # store
-    addi t2, t2, 1
+    # Extract and convert minutes ones digit
+    srli a0, s1, 8       # shift right 8 bits to get min ones
+    andi a0, a0, 0xF     # mask to get only 4 bits
+    jal hexasc           # convert to ASCII
+    sb a0, 0(s0)         # store at buffer
+    addi s0, s0, 1       # increment buffer pointer
 
-    srli t0, a1, 8       # min ones
-    andi t0, t0, 0xF
-    mv a0, t0
-    jal hexasc
-    sb a0, 0(t2)
-    addi t2, t2, 1
+    # Store colon
+    li a0, ':'           # colon character
+    sb a0, 0(s0)         # store at buffer
+    addi s0, s0, 1       # increment buffer pointer
 
-    li a0, ':'           # colon
-    sb a0, 0(t2)
-    addi t2, t2, 1
+    # Extract and convert seconds tens digit
+    srli a0, s1, 4       # shift right 4 bits to get sec tens
+    andi a0, a0, 0xF     # mask to get only 4 bits
+    jal hexasc           # convert to ASCII
+    sb a0, 0(s0)         # store at buffer
+    addi s0, s0, 1       # increment buffer pointer
 
-    srli t0, a1, 4       # sec tens
-    andi t0, t0, 0xF
-    mv a0, t0
-    jal hexasc
-    sb a0, 0(t2)
-    addi t2, t2, 1
+    # Extract and convert seconds ones digit
+    andi a0, s1, 0xF     # mask to get sec ones (lowest 4 bits)
+    jal hexasc           # convert to ASCII
+    sb a0, 0(s0)         # store at buffer
+    addi s0, s0, 1       # increment buffer pointer
 
-    andi t0, a1, 0xF     # sec ones
-    mv a0, t0
-    jal hexasc
-    sb a0, 0(t2)
-    addi t2, t2, 1
-
-    li a0, 0             # null terminator
-    sb a0, 0(t2)
+    # Store null terminator
+    li a0, 0             # null byte
+    sb a0, 0(s0)         # store at buffer
 
     # Restore registers
-    lw t0, 0(sp)
-    lw ra, 4(sp)
-    addi sp, sp, 8
+    POP(s1)
+    POP(s0) 
+    POP(ra)
     jr ra
 
 
 delay:
-    # Simple busy loop to waste time
-    # a0 = ms (not really accurate, just loop)
-    mv t0, a0        # copy input
-delay_loop:
-    addi t0, t0, -1
-    bnez t0, delay_loop
-    jr ra
+    # Save registers we will use
+    PUSH a0           # Save the ms parameter (input)
+    PUSH ra           # Save return address
+    PUSH t0           # Save t0 (iterator for inner loop)
+    PUSH t1           # Save t1 (counter for outer loop)
+
+    # Initialize the times register to 0
+    li t1, 0          # t1 = 0 (this will be our 'times' register)
+
+loop_outer:
+    # Loop 4711 times (inner loop)
+    li t0, 4711       # t0 = 4711 (number of iterations for inner loop)
+
+loop_inner:
+    addi t0, t0, -1   # t0 = t0 - 1
+    bnez t0, loop_inner # continue inner loop if t0 != 0
+
+    # Increment the times register (t1)
+    addi t1, t1, 1     # t1 = t1 + 1
+
+    # Check if times (t1) equals ms (a0), if yes, exit loop
+    beq t1, a0, done   # if t1 == ms, exit
+
+    # Otherwise, repeat the outer loop (loop 4711 more times)
+    j loop_outer
+
+done:
+    # Restore registers before returning
+    POP t1            # Restore t1 (times register)
+    POP t0            # Restore t0 (iterator for inner loop)
+    POP ra            # Restore return address
+    POP a0            # Restore the ms parameter
+
+    jr ra             # Return from function
